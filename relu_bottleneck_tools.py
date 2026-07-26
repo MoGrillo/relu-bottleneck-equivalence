@@ -308,7 +308,8 @@ class SymmetryReport:
         ``False`` means an explicit nontrivial symmetry is present.
         ``True`` means the strict sign criterion predicts identifiability,
         conditional on the remaining genericity assumptions.
-        ``None`` means the parameter lies on a sign boundary and no explicit
+        ``None`` means the strict generic theorem is not applicable (for
+        example on a sign boundary or when ``n1<2``) and no explicit
         non-identifiability certificate was found.
         """
         if self.certified_nonidentifiable:
@@ -545,9 +546,6 @@ def _nonhiding_certificate(theta: ThreeLayerParams, eta: ThreeLayerParams) -> Eq
 
 
 def _canonicalize_hiding_multi(p: ThreeLayerParams, hidden: int) -> ThreeLayerParams:
-    if p.n2 < 2:
-        raise ValueError("This normalization requires reduced second-layer width at least two.")
-
     entries: List[Tuple[VectorKey, int, Scalar, bool]] = []
     for k in range(p.n1):
         if k == hidden:
@@ -655,7 +653,42 @@ def sign_flip_matrix(n1: int, hidden: int, flipped: Iterable[int]) -> sp.Matrix:
 
 
 def apply_sign_flip(p: ThreeLayerParams, hidden: int, flipped: Iterable[int]) -> ThreeLayerParams:
-    M = sign_flip_matrix(p.n1, hidden, flipped)
+    """Apply an exact width-one hiding sign flip.
+
+    The paper states the action after normalizing the active second-layer row
+    to entries in ``{+1, -1}``.  Here we conjugate that action by the positive
+    first-layer scalings, so arbitrary nonzero coefficient magnitudes are
+    supported.  Zero coefficients may remain unflipped.
+    """
+    if not 0 <= hidden < p.n1:
+        raise IndexError("The hidden-neuron index is out of range.")
+    flipped = tuple(dict.fromkeys(flipped))
+    if any(not 0 <= k < p.n1 for k in flipped):
+        raise IndexError("A flipped-neuron index is out of range.")
+    if hidden in flipped:
+        raise ValueError("The hidden neuron cannot be flipped.")
+
+    reduced, _ = remove_dead_second_layer(p)
+    if reduced.n2 != 1 or hiding_index(reduced) != hidden:
+        raise ValueError(
+            "Sign flips require exactly one non-dead second-layer neuron "
+            "that weakly hides the selected hyperplane."
+        )
+
+    hidden_scale = sp.simplify(reduced.W2[0, hidden])
+    if _sign(hidden_scale) <= 0:
+        raise ValueError("The hidden coefficient must be positive.")
+
+    M = sp.eye(p.n1)
+    for k in flipped:
+        coefficient = sp.simplify(reduced.W2[0, k])
+        if _sign(coefficient) >= 0:
+            raise ValueError(
+                "Only strictly negative non-hidden coefficients can be flipped; "
+                "zero coefficients remain meaningful but are not flippable."
+            )
+        M[hidden, k] = sp.simplify(coefficient / hidden_scale)
+        M[k, k] = -1
     return replace(p, W1=M * p.W1, b1=M * p.b1)
 
 
@@ -691,6 +724,18 @@ def _hiding_single_certificate(
     j_theta: int,
     j_eta: int,
 ) -> EquivalenceResult:
+    # The translation-only subfamily remains meaningful when some non-hidden
+    # W2 coefficients are zero.  Certify it before invoking the generic
+    # sign-flip normalization, which necessarily requires nonzero entries.
+    direct = _hiding_multi_certificate(theta, eta, j_theta, j_eta)
+    if direct.accepted:
+        return EquivalenceResult(
+            True,
+            "hiding, width = 1",
+            "The parameters differ by the hidden-hyperplane translation symmetry.",
+            direct.diagnostics,
+        )
+
     try:
         th = _normalize_single_hiding(theta, j_theta)
         et = _normalize_single_hiding(eta, j_eta)
@@ -747,10 +792,46 @@ def _hiding_single_certificate(
 
 
 def translate_hidden(p: ThreeLayerParams, hidden: int, t: Scalar) -> ThreeLayerParams:
+    """Translate a weakly hidden hyperplane within its exact symmetry domain.
+
+    Zero non-hidden coefficients and zero biases are allowed.  Dead
+    second-layer neurons are ignored when identifying the hiding pattern, but
+    must remain dead after the translation.
+    """
+    if not 0 <= hidden < p.n1:
+        raise IndexError("The hidden-neuron index is out of range.")
+    reduced, dead = remove_dead_second_layer(p)
+    if reduced.n2 == 0 or hiding_index(reduced) != hidden:
+        raise ValueError(
+            "The selected first-layer hyperplane is not hidden by every "
+            "non-dead second-layer neuron."
+        )
+
+    t = sp.simplify(t)
     b1 = p.b1.copy()
     b1[hidden, 0] = sp.simplify(b1[hidden, 0] + t)
     b2 = _simplify_matrix(p.b2 - p.W2[:, hidden] * t)
-    return replace(p, b1=b1, b2=b2)
+    translated = replace(p, b1=b1, b2=b2)
+
+    translated_reduced, translated_dead = remove_dead_second_layer(translated)
+    if translated_dead != dead:
+        raise ValueError(
+            "The requested translation leaves the exact symmetry domain "
+            "because a dead second-layer neuron would change type."
+        )
+    if (
+        translated_reduced.n2 != reduced.n2
+        or hiding_index(translated_reduced) != hidden
+    ):
+        bounds = tuple(
+            sp.simplify(reduced.b2[i, 0] / reduced.W2[i, hidden])
+            for i in range(reduced.n2)
+        )
+        raise ValueError(
+            "The requested translation leaves the hiding region; "
+            f"the active-row lower bounds are {bounds}."
+        )
+    return translated
 
 
 def translate_linear_neuron(p: ThreeLayerParams, neuron: int, t: Scalar) -> ThreeLayerParams:
@@ -823,6 +904,29 @@ def sample_grid_equal(
 # ---------------------------------------------------------------------------
 
 
+def _second_layer_sign_boundary(p: ThreeLayerParams) -> bool:
+    return any(_is_zero(v) for v in p.W2) or any(_is_zero(v) for v in p.b2)
+
+
+def _boundary_essential_lower_bound(p: ThreeLayerParams) -> int:
+    """Conservative essential-dimension bound from explicit zero-safe symmetries."""
+    kinds = second_layer_types(p)
+    dead_count = sum(kind == "dead" for kind in kinds)
+    linear_count = sum(kind == "linear" for kind in kinds)
+    reduced, _ = remove_dead_second_layer(p)
+    hiding_bound = 1 if reduced.n2 and hiding_index(reduced) is not None else 0
+
+    # If an entire W2 column vanishes, the corresponding first-layer affine
+    # row is functionally invisible.  Modulo its positive scaling, this gives
+    # at least d essential directions.
+    invisible_first = sum(
+        all(_is_zero(p.W2[i, j]) for i in range(p.n2))
+        for j in range(p.n1)
+    )
+    free_block_bound = dead_count * (p.n1 + p.m) + invisible_first * p.d
+    return free_block_bound + linear_count + hiding_bound
+
+
 def _active_generic_dimension(p: ThreeLayerParams) -> FiberDimensionReport:
     """Dimension for a parameter with no dead second-layer neurons."""
     standard = p.n1 + p.n2
@@ -845,15 +949,33 @@ def _active_generic_dimension(p: ThreeLayerParams) -> FiberDimensionReport:
 
     kinds = second_layer_types(p)
     linear_count = sum(kind == "linear" for kind in kinds)
+    nonlinear_count = sum(kind == "nonlinear" for kind in kinds)
     shallow_d = p.n1
     m = p.m
 
-    if linear_count <= min(shallow_d, m):
+    if linear_count < min(shallow_d, m):
         essential = linear_count ** 2
-        case = f"layerwise theorem: r={linear_count} <= min(n1,m), dimension r^2"
+        components: Optional[int] = 1
+        case = f"layerwise theorem: r={linear_count} < min(n1,m), dimension r^2"
+        component_note = "Only the original nonlinear-neuron orientation is feasible."
+    elif linear_count == shallow_d and shallow_d <= m:
+        essential = linear_count ** 2
+        components = 2 ** nonlinear_count
+        case = "layerwise theorem: r=n1<=m, dimension r^2 for every orientation"
+        component_note = f"All {components} orientation families are feasible."
+    elif linear_count == m and m < shallow_d:
+        essential = linear_count ** 2
+        components = None
+        case = "layerwise theorem: r=m<n1, dimension r^2 on feasible orientations"
+        component_note = (
+            "Other orientation families require the paper's pointed-cone test; "
+            "their count is not computed."
+        )
     elif linear_count == m + 1 and linear_count <= shallow_d:
         essential = m * m + m + shallow_d
+        components = 2 ** nonlinear_count
         case = "layerwise theorem: r=m+1<=n1, dimension m^2+m+n1"
+        component_note = f"All {components} orientation families are feasible."
     else:
         return FiberDimensionReport(
             essential_dimension=None,
@@ -873,13 +995,14 @@ def _active_generic_dimension(p: ThreeLayerParams) -> FiberDimensionReport:
         essential_dimension=essential,
         full_dimension=standard + essential,
         standard_scaling_dimension=standard,
-        discrete_component_count=1,
+        discrete_component_count=components,
         formula_case=case,
         exact_under_assumptions=True,
         lower_bound_essential=essential,
         notes=(
             "This is the dimension of the component containing the parameter.",
             "The essential dimension is modulo positive scaling and permutation symmetries.",
+            component_note,
         ),
     )
 
@@ -902,6 +1025,24 @@ def generic_fiber_dimension(p: ThreeLayerParams) -> FiberDimensionReport:
             exact_under_assumptions=False,
             lower_bound_essential=None,
             notes=("The complete characterization used here requires n1<=d.",),
+        )
+
+    if _second_layer_sign_boundary(p):
+        lower = _boundary_essential_lower_bound(p)
+        return FiberDimensionReport(
+            essential_dimension=None,
+            full_dimension=None,
+            standard_scaling_dimension=p.n1 + p.n2,
+            discrete_component_count=None,
+            formula_case="nongeneric sign boundary: generic dimension formula not applied",
+            exact_under_assumptions=False,
+            lower_bound_essential=lower,
+            notes=(
+                "Zero entries are supported and all reported symmetry certificates remain exact.",
+                "The lower bound uses explicit dead, linear, hiding, and invisible-column freedoms.",
+                "Additional cancellations, rank drops, or invisible blocks can enlarge the fiber.",
+                "The nominal scaling count may have stabilizers at nongeneric parameters.",
+            ),
         )
 
     reduced, dead = remove_dead_second_layer(p)
@@ -957,10 +1098,15 @@ def _genericity_warnings(p: ThreeLayerParams) -> Tuple[str, ...]:
     warnings: List[str] = []
     if p.n1 > p.d:
         warnings.append("The architecture is not bottleneck.")
+    if p.n1 < 2:
+        warnings.append("The paper's sign-based identifiability theorem assumes n1>=2.")
     if p.W1.rank() < p.n1:
         warnings.append("W1 does not have full row rank.")
-    if any(_is_zero(v) for v in p.W2) or any(_is_zero(v) for v in p.b2):
-        warnings.append("W2 or b2 contains zero entries; the parameter lies on sign boundaries.")
+    if _second_layer_sign_boundary(p):
+        warnings.append(
+            "W2 or b2 contains zero entries; exact certificates remain valid, "
+            "but generic completeness and dimension formulas do not apply."
+        )
     if any(all(_is_zero(v) for v in p.W1.row(i)) and _is_zero(p.b1[i, 0]) for i in range(p.n1)):
         warnings.append("A first-layer affine row is zero.")
     affine_keys: List[VectorKey] = []
@@ -1008,9 +1154,16 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
             f"translation of hidden first-layer hyperplane {reduced_hiding}"
         )
         if reduced.n2 == 1:
-            discrete.append(
-                f"2^{p.n1 - 1} width-one sign-flip choices associated with hyperplane {reduced_hiding}"
+            flippable = tuple(
+                k
+                for k in range(p.n1)
+                if k != reduced_hiding and _sign(reduced.W2[0, k]) < 0
             )
+            if flippable:
+                discrete.append(
+                    f"2^{len(flippable)} exact width-one sign-flip choices "
+                    f"on indices {flippable} associated with hyperplane {reduced_hiding}"
+                )
 
     # Dead neurons, linear neurons, and hiding patterns are explicit
     # certificates of non-identifiability, including on sign boundaries.
@@ -1019,10 +1172,7 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
     # The paper's strict sign criterion applies only away from zeros in
     # [W2, b2].  The remaining geometric genericity assumptions are not
     # checked automatically.
-    sign_criterion_applicable = not (
-        any(_is_zero(v) for v in p.W2)
-        or any(_is_zero(v) for v in p.b2)
-    )
+    sign_criterion_applicable = p.n1 >= 2 and not _second_layer_sign_boundary(p)
     generic_identifiable_candidate: Optional[bool]
     if sign_criterion_applicable:
         generic_identifiable_candidate = not certified_nonidentifiable
@@ -1034,6 +1184,10 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
     elif generic_identifiable_candidate is True:
         identifiability_status = (
             "generic-identifiable candidate (conditional on remaining genericity)"
+        )
+    elif p.n1 < 2:
+        identifiability_status = (
+            "undetermined outside the stated n1>=2 identifiability theorem"
         )
     else:
         identifiability_status = "undetermined on a sign boundary"

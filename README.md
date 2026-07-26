@@ -1,118 +1,109 @@
-\
-        # Exact equivalence and symmetry tools for three-layer bottleneck ReLU networks
+# Exact equivalence and symmetry tools for three-layer bottleneck ReLU networks
 
-        Anonymous research artifact accompanying a theoretical study of the fibers and
-        symmetries of three-layer ReLU networks with architecture
-        \((d,n_1,n_2,m)\) in the bottleneck regime \(n_1\le d\).
+Anonymous research artifact accompanying a theoretical study of the fibers and
+symmetries of three-layer ReLU networks with architecture
+\((d,n_1,n_2,m)\) in the bottleneck regime \(n_1\le d\).
 
-        ## What is included
+## Contents
 
-        - `relu_bottleneck_tools.py`: exact-rational Python implementation.
-        - `relu_bottleneck_symmetry_workbench.ipynb`: self-contained demonstration
-          notebook.
-        - `run_tests.py`: small exact-arithmetic smoke tests.
-        - `setup.sh`: Debian/Ubuntu virtual-environment setup.
-        - `requirements.txt`: pip dependencies.
-        - `environment.yml`: Conda environment.
+- `relu_bottleneck_tools.py`: reusable exact-rational implementation.
+- `relu_bottleneck_symmetry_workbench.ipynb`: self-contained, executed workbench.
+- `run_tests.py`: exact-arithmetic smoke and regression tests.
+- `setup.sh`: Debian/Ubuntu virtual-environment setup.
+- `requirements.txt`: pip dependencies.
+- `environment.yml`: Conda environment.
 
-        ## Implemented functionality
+## Implemented functionality
 
-        ```python
-        equivalence_test(theta, eta)
-        analyze_parameter(theta)
-        classify_symmetries(theta)
-        generic_fiber_dimension(theta)
-        sample_rational_initialization(...)
-        initialization_study(...)
-        ```
+```python
+equivalence_test(theta, eta)
+analyze_parameter(theta)
+classify_symmetries(theta)
+generic_fiber_dimension(theta)
+sample_rational_initialization(...)
+initialization_study(...)
+```
 
-        The workbench can:
+The workbench tests equivalence, classifies layerwise and hiding symmetries,
+reports generic-fiber dimensions and identifiability conclusions under their
+stated assumptions, and studies rationalized Xavier/Glorot and He/Kaiming
+initializations.
 
-        1. test equivalence of two parameters;
-        2. classify the layerwise and hiding symmetries present at a parameter;
-        3. compute the generic-fiber dimension from the theoretical
-           characterization;
-        4. determine identifiability under the genericity assumptions;
-        5. sample rationalized Xavier/Glorot and He/Kaiming initializations.
+## Mathematical contract
 
-        ## Mathematical guarantee
+The equivalence test is sound on arbitrary exact inputs:
 
-        The equivalence test is sound on arbitrary exact inputs:
+\[
+\texttt{True}\Longrightarrow f_\theta=f_\eta.
+\]
 
-        \[
-        \texttt{True}\Longrightarrow f_\theta=f_\eta.
-        \]
+Under the paper's generic bottleneck assumptions, it is complete:
 
-        Under the generic bottleneck assumptions of the accompanying paper, it is
-        complete:
+\[
+\texttt{True}\Longleftrightarrow f_\theta=f_\eta.
+\]
 
-        \[
-        \texttt{True}\Longleftrightarrow f_\theta=f_\eta.
-        \]
+On nongeneric inputs, `False` can therefore be a false negative. The code does
+not attempt to verify the complete geometric genericity condition.
 
-        On nongeneric inputs, `False` can therefore be a false negative. The code does
-        not attempt to verify the complete geometric genericity condition.
+Zero entries are supported without numerical tolerances. Dead, linear,
+weak-hiding, and accepted equivalence certificates remain exact on sign
+boundaries. Generic identifiability is reported as undetermined there, and the
+dimension report gives an explicit lower bound because additional nongeneric
+cancellations or invisible parameter blocks may enlarge the fiber.
 
-        ## Recommended installation on Debian or Ubuntu
+## Installation
 
-        Do not install into the system Python. Run:
+On Debian or Ubuntu, use a dedicated virtual environment:
 
-        ```bash
-        bash setup.sh
-        ```
+```bash
+bash setup.sh
+source ~/.venvs/relu-bottleneck/bin/activate
+jupyter lab
+```
 
-        Then:
+Open `relu_bottleneck_symmetry_workbench.ipynb` with the
+**Python (relu-bottleneck)** kernel.
 
-        ```bash
-        source ~/.venvs/relu-bottleneck/bin/activate
-        jupyter lab
-        ```
+Alternatively, use Conda:
 
-        Open `relu_bottleneck_symmetry_workbench.ipynb` and select the kernel
-        **Python (relu-bottleneck)**.
+```bash
+conda env create -f environment.yml
+conda activate relu-bottleneck
+jupyter lab
+```
 
-        ## Conda installation
+## Tests
 
-        ```bash
-        conda env create -f environment.yml
-        conda activate relu-bottleneck
-        jupyter lab
-        ```
+```bash
+python run_tests.py
+```
 
-        ## Run the tests
+## Exact arithmetic
 
-        ```bash
-        python run_tests.py
-        ```
+Use integers or SymPy rationals:
 
-        ## Exact arithmetic
+```python
+import sympy as sp
 
-        Use integers or SymPy rationals:
+q = sp.Rational(1, 3)
+```
 
-        ```python
-        import sympy as sp
+Floating-point inputs are intentionally not the default because the algorithm
+relies on exact sign, proportionality, and equality tests.
 
-        q = sp.Rational(1, 3)
-        ```
+## Initialization experiments
 
-        Floating-point inputs are intentionally not the default because the algorithm
-        relies on exact sign, proportionality, and equality tests.
+The notebook studies rationalized Xavier/Glorot and He/Kaiming initializations
+with small random biases. Zero-bias initialization is omitted from the main
+experiment to avoid the most obvious sign-boundary degeneracies.
 
-        ## Anonymity
+The summary reports unconditional non-identifiability certificates, conditional
+generic-identifiability candidates, and the frequencies of dead, linear, and
+hiding sign regimes.
 
-        The repository contains no author names, institutional affiliations, email
-        addresses, paper identifiers, or links to non-anonymous profiles. Before
-        uploading, inspect the Git commit metadata and use a fresh account whose
-        username, email, avatar, and profile do not reveal the authors.
+## Anonymity
 
-\
-    ## Interpreting initialization experiments
-
-    The notebook studies rationalized Xavier/Glorot and He/Kaiming
-    initializations with small random biases. Zero-bias initialization is
-    intentionally omitted to keep the experiment away from the most obvious
-    sign-boundary degeneracies.
-
-    The summary reports explicit non-identifiability certificates, conditional
-    generic-identifiability candidates, and the frequencies of dead, linear,
-    and hiding sign regimes.
+The repository contains no author names, institutional affiliations, email
+addresses, paper identifiers, or links to non-anonymous profiles. Before public
+release, the Git commit metadata and hosting account must also remain neutral.

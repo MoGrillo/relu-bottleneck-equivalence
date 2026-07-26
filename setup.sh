@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ENV_DIR="${HOME}/.venvs/relu-bottleneck"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "Creating virtual environment at ${ENV_DIR}"
 
@@ -19,7 +20,7 @@ fi
 source "${ENV_DIR}/bin/activate"
 
 python -m pip install --upgrade pip
-python -m pip install "sympy>=1.12" "pandas>=2.0" "jupyterlab>=4.0" ipykernel
+python -m pip install -r "${SCRIPT_DIR}/requirements.txt"
 
 python -m ipykernel install \
     --user \

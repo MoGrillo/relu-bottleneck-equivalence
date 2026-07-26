@@ -7,3 +7,4 @@ dependencies:
   - pandas>=2.0
   - jupyterlab>=4.0
   - ipykernel>=6.0
+  - nbconvert>=7.0
