@@ -1,0 +1,9 @@
+name: relu-bottleneck
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - sympy>=1.12
+  - pandas>=2.0
+  - jupyterlab>=4.0
+  - ipykernel>=6.0
