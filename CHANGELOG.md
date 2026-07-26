@@ -10,3 +10,10 @@
   rate when every sample lies on a sign boundary.
 - Added regression tests for sign-boundary behavior.
 - Added VS Code recommendations and `AGENTS.md` for Codex.
+
+## Version 3
+
+- Removed zero-bias initialization experiments.
+- Retained only small random bias initialization.
+- Simplified the empirical summary and notebook explanation.
+- Removed the sign-boundary demonstration from the main notebook.

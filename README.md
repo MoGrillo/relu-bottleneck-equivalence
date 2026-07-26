@@ -105,17 +105,14 @@
         uploading, inspect the Git commit metadata and use a fresh account whose
         username, email, avatar, and profile do not reveal the authors.
 
+\
+    ## Interpreting initialization experiments
 
-## Interpreting initialization experiments
+    The notebook studies rationalized Xavier/Glorot and He/Kaiming
+    initializations with small random biases. Zero-bias initialization is
+    intentionally omitted to keep the experiment away from the most obvious
+    sign-boundary degeneracies.
 
-The initialization study reports:
-
-- `certified_nonidentifiable`: a dead-neuron, linear-neuron, or hiding
-  symmetry was detected;
-- `sign_criterion_applicable`: every entry of `[W2, b2]` is nonzero;
-- `generic_identifiable_candidate`: the strict sign criterion predicts
-  identifiability, conditional on the remaining genericity assumptions.
-
-A zero-bias initialization lies on sign boundaries. Its
-`generic_identifiable_candidate` value is therefore missing rather than
-artificially counted as identifiable.
+    The summary reports explicit non-identifiability certificates, conditional
+    generic-identifiability candidates, and the frequencies of dead, linear,
+    and hiding sign regimes.
