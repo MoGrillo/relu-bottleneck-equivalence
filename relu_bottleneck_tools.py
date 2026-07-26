@@ -294,13 +294,31 @@ class SymmetryReport:
     reduced_hiding_index: Optional[int]
     continuous_symmetries: Tuple[str, ...]
     discrete_symmetries: Tuple[str, ...]
-    generic_sign_identifiable: bool
+    certified_nonidentifiable: bool
+    sign_criterion_applicable: bool
+    generic_identifiable_candidate: Optional[bool]
+    identifiability_status: str
     genericity_warnings: Tuple[str, ...]
     dimension: FiberDimensionReport
 
     @property
-    def identifiable_under_genericity(self) -> bool:
-        return self.generic_sign_identifiable
+    def identifiable_under_genericity(self) -> Optional[bool]:
+        """Tri-state identifiability conclusion.
+
+        ``False`` means an explicit nontrivial symmetry is present.
+        ``True`` means the strict sign criterion predicts identifiability,
+        conditional on the remaining genericity assumptions.
+        ``None`` means the parameter lies on a sign boundary and no explicit
+        non-identifiability certificate was found.
+        """
+        if self.certified_nonidentifiable:
+            return False
+        return self.generic_identifiable_candidate
+
+    @property
+    def generic_sign_identifiable(self) -> Optional[bool]:
+        """Deprecated compatibility alias for ``generic_identifiable_candidate``."""
+        return self.generic_identifiable_candidate
 
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
@@ -994,11 +1012,31 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
                 f"2^{p.n1 - 1} width-one sign-flip choices associated with hyperplane {reduced_hiding}"
             )
 
-    generic_nonidentifiable = (
-        any(_strict_all_negative_row(p, i) for i in range(p.n2))
-        or any(_strict_all_positive_row(p, i) for i in range(p.n2))
-        or bool(strict_hiding)
+    # Dead neurons, linear neurons, and hiding patterns are explicit
+    # certificates of non-identifiability, including on sign boundaries.
+    certified_nonidentifiable = bool(dead or linear or weak_hiding)
+
+    # The paper's strict sign criterion applies only away from zeros in
+    # [W2, b2].  The remaining geometric genericity assumptions are not
+    # checked automatically.
+    sign_criterion_applicable = not (
+        any(_is_zero(v) for v in p.W2)
+        or any(_is_zero(v) for v in p.b2)
     )
+    generic_identifiable_candidate: Optional[bool]
+    if sign_criterion_applicable:
+        generic_identifiable_candidate = not certified_nonidentifiable
+    else:
+        generic_identifiable_candidate = None
+
+    if certified_nonidentifiable:
+        identifiability_status = "certified non-identifiable"
+    elif generic_identifiable_candidate is True:
+        identifiability_status = (
+            "generic-identifiable candidate (conditional on remaining genericity)"
+        )
+    else:
+        identifiability_status = "undetermined on a sign boundary"
 
     return SymmetryReport(
         parameter_name=p.name,
@@ -1012,7 +1050,10 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
         reduced_hiding_index=reduced_hiding,
         continuous_symmetries=tuple(continuous),
         discrete_symmetries=tuple(discrete),
-        generic_sign_identifiable=not generic_nonidentifiable,
+        certified_nonidentifiable=certified_nonidentifiable,
+        sign_criterion_applicable=sign_criterion_applicable,
+        generic_identifiable_candidate=generic_identifiable_candidate,
+        identifiability_status=identifiability_status,
         genericity_warnings=_genericity_warnings(p),
         dimension=generic_fiber_dimension(p),
     )
@@ -1168,10 +1209,13 @@ def initialization_study(
                         "bias_mode": bias_mode,
                         "sample": sample,
                         "seed": sample_seed,
-                        "generic_sign_identifiable": report.generic_sign_identifiable,
+                        "certified_nonidentifiable": report.certified_nonidentifiable,
+                        "sign_criterion_applicable": report.sign_criterion_applicable,
+                        "generic_identifiable_candidate": report.generic_identifiable_candidate,
+                        "identifiability_status": report.identifiability_status,
                         "has_dead": bool(report.dead_indices),
                         "has_linear": bool(report.linear_indices),
-                        "has_hiding": report.reduced_hiding_index is not None,
+                        "has_hiding": bool(report.weak_hiding_indices),
                         "dead_count": len(report.dead_indices),
                         "linear_count": len(report.linear_indices),
                         "essential_dimension": report.dimension.essential_dimension,

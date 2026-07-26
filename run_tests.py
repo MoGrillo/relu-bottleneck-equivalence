@@ -75,9 +75,45 @@ def test_identifiable_sign_regime() -> None:
     assert report.dimension.essential_dimension == 0
 
 
+def test_zero_bias_classification_is_not_misreported() -> None:
+    theta = ThreeLayerParams(
+        W1=sp.eye(2),
+        b1=sp.Matrix([0, 0]),
+        W2=sp.Matrix([[-1, -2], [1, -1]]),
+        b2=sp.Matrix([0, 0]),
+        W3=sp.Matrix([[1, 1]]),
+        b3=sp.Matrix([0]),
+        name="zero_bias_boundary",
+    )
+    report = analyze_parameter(theta)
+    assert report.certified_nonidentifiable is True
+    assert report.sign_criterion_applicable is False
+    assert report.generic_identifiable_candidate is None
+    assert report.identifiable_under_genericity is False
+
+
+def test_boundary_without_certificate_is_undetermined() -> None:
+    theta = ThreeLayerParams(
+        W1=sp.eye(2),
+        b1=sp.Matrix([0, 0]),
+        W2=sp.Matrix([[1, -1], [-1, 1]]),
+        b2=sp.Matrix([0, 0]),
+        W3=sp.Matrix([[1, 1]]),
+        b3=sp.Matrix([0]),
+        name="boundary_unknown",
+    )
+    report = analyze_parameter(theta)
+    assert report.certified_nonidentifiable is False
+    assert report.sign_criterion_applicable is False
+    assert report.generic_identifiable_candidate is None
+    assert report.identifiable_under_genericity is None
+
+
 if __name__ == "__main__":
     test_hiding_width_at_least_two()
     test_hiding_width_one_sign_flip()
     test_linear_neuron_translation()
     test_identifiable_sign_regime()
+    test_zero_bias_classification_is_not_misreported()
+    test_boundary_without_certificate_is_undetermined()
     print("All exact-arithmetic smoke tests passed.")
