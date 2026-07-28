@@ -1,0 +1,330 @@
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=25mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{listings}
+
+\definecolor{codeblue}{RGB}{25,70,120}
+\definecolor{codegray}{RGB}{90,90,90}
+\definecolor{codeback}{RGB}{247,248,250}
+
+\lstdefinelanguage{pseudocode}{
+  morekeywords={
+    algorithm,input,output,require,if,then,else,end,for,each,while,do,
+    return,true,false,unknown,and,or,not,in,with,continue
+  },
+  sensitive=false,
+  morecomment=[l]{//},
+  morestring=[b]"
+}
+
+\lstset{
+  language=pseudocode,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{codeblue}\bfseries,
+  commentstyle=\color{codegray}\itshape,
+  backgroundcolor=\color{codeback},
+  frame=single,
+  framesep=6pt,
+  numbers=left,
+  numberstyle=\tiny\color{codegray},
+  numbersep=8pt,
+  columns=fullflexible,
+  keepspaces=true,
+  breaklines=true,
+  showstringspaces=false,
+  escapeinside={(*@}{@*)}
+}
+
+\newcommand{\relu}{[\cdot]_+}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\True}{\mathsf{true}}
+\newcommand{\False}{\mathsf{false}}
+\newcommand{\Unknown}{\mathsf{unknown}}
+
+\title{Pseudocode for Exact Symmetry and Identifiability Analysis\\
+of Three-Layer Bottleneck ReLU Networks}
+\author{Anonymous Authors}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Scope and notation}
+
+We follow the notation of the paper.  A three-layer architecture is
+\[
+  \mathcal A=(d,n_1,n_2,m),
+\]
+and its parameter space is denoted by \(\Theta_{\mathcal A}\).  A parameter is
+\[
+  \theta
+  =
+  \bigl(W^{(\ell)},b^{(\ell)}\bigr)_{\ell\in[3]}
+  \in\Theta_{\mathcal A}.
+\]
+The two ReLU layers and the final affine layer are
+\[
+  \phi^{(\ell)}(x)
+  =
+  [W^{(\ell)}x+b^{(\ell)}]_+,\quad \ell\in[2],
+  \qquad
+  T^{(3)}(y)=W^{(3)}y+b^{(3)},
+\]
+and the realization is
+\[
+  f_\theta(x)
+  =
+  T^{(3)}\circ\phi^{(2)}\circ\phi^{(1)}(x).
+\]
+We use \(z^{(\ell,\theta)}\) and \(a^{(\ell,\theta)}\) for the preactivation
+and activation maps, respectively, with \(a^{(0,\theta)}(x)=x\).
+
+The fiber and generic fiber are
+\[
+  \mathcal S(\theta)
+  :=
+  \{\eta\in\Theta_{\mathcal A}:f_\eta=f_\theta\},
+  \qquad
+  \widetilde{\mathcal S}(\theta)
+  :=
+  \mathcal S(\theta)\cap\widetilde{\Theta}_{\mathcal A}.
+\]
+The relation \(\theta\sim\eta\) denotes equivalence under hidden-neuron
+permutations and positive rescalings.  Thus \(\theta\) is identifiable when
+\(f_\eta=f_\theta\) implies \(\eta\sim\theta\).
+
+Throughout, \(\mathcal A=(d,n_1,n_2,m)\) is fixed with
+\(d\geq n_1\geq2\), and all comparisons, signs, normalizations, and matrix
+identities are exact.  The algorithms accept zero entries.  Every positive
+equivalence or non-identifiability certificate is valid for arbitrary exact
+parameters; completeness and identifiability are asserted only on
+\(\widetilde{\Theta}_{\mathcal A}\).
+
+Following Definition~7 of the paper, a second-layer neuron \(i\in[n_2]\)
+\emph{hides hyperplane \(j\in[n_1]\)} if
+\[
+  W^{(2)}_{ij}>0,\qquad
+  W^{(2)}_{ik}\leq 0\quad(k\neq j),\qquad
+  b^{(2)}_i\leq 0.
+\]
+The parameter \(\theta\) hides hyperplane \(j\) if every \(i\in[n_2]\) does.
+These weak inequalities include exact parameters with zeros.  On
+\(\widetilde{\Theta}_{\mathcal A}\), the relevant signs are strict.
+
+\section{Exact functional-equivalence certificate}
+
+\begin{lstlisting}[caption={Exact equivalence dispatcher}]
+algorithm EquivalenceTest((*@$\theta,\eta\in\Theta_{\mathcal A}$@*))
+output: true if the certificate proves (*@$f_\theta=f_\eta$@*)
+
+(*@$\bar\theta$@*) <- RemoveDeadSecondLayer((*@$\theta$@*))
+(*@$\bar\eta$@*)   <- RemoveDeadSecondLayer((*@$\eta$@*))
+
+if Width2((*@$\bar\theta$@*)) = Width2((*@$\bar\eta$@*)) = 0 then
+    return (*@$\bar b^{(3,\theta)}=\bar b^{(3,\eta)}$@*)
+else if exactly one reduced width is zero then
+    return false
+end if
+
+(*@$j_\theta$@*) <- UniqueWeakHidingIndex((*@$\bar\theta$@*))
+(*@$j_\eta$@*)   <- UniqueWeakHidingIndex((*@$\bar\eta$@*))
+
+if exactly one of (*@$j_\theta,j_\eta$@*) is unknown then
+    return false
+end if
+
+if both (*@$j_\theta,j_\eta$@*) are unknown then
+    return NonHidingCertificate((*@$\bar\theta,\bar\eta$@*))
+else if Width2((*@$\bar\theta$@*)) != Width2((*@$\bar\eta$@*)) then
+    return false
+else if Width2((*@$\bar\theta$@*)) >= 2 then
+    return MultiHidingCertificate(
+        (*@$\bar\theta,\bar\eta,j_\theta,j_\eta$@*))
+else
+    return WidthOneHidingCertificate(
+        (*@$\bar\theta,\bar\eta,j_\theta,j_\eta$@*))
+end if
+\end{lstlisting}
+
+For a non-hiding parameter, the induced one-hidden-layer map uses the paper's
+notation
+\[
+  g_{\theta'}:\R_{\geq 0}^{n_1}\to\R^m,
+  \qquad
+  g_{\theta'}(y)
+  =
+  W^{(3)}[W^{(2)}y+b^{(2)}]_+ + b^{(3)},
+\]
+where \(\theta'=(W^{(2)},b^{(2)},W^{(3)},b^{(3)})\).
+
+\begin{lstlisting}[caption={Non-hiding certificate}]
+algorithm NonHidingCertificate((*@$\theta,\eta$@*))
+((*@$\theta^\circ,\eta^\circ$@*)) <-
+    CanonicalizeFirstLayerModuloPositiveScalingAndPermutation(
+        (*@$\theta,\eta$@*))
+
+if (*@$[W^{(1,\theta^\circ)},b^{(1,\theta^\circ)}]
+       \neq [W^{(1,\eta^\circ)},b^{(1,\eta^\circ)}]$@*) then
+    return false
+end if
+
+(*@$(\mathcal H_\theta,A_{R,\theta},b_{R,\theta},c_\theta)$@*) <-
+    HyperplaneRepresentation((*@$g_{\theta'}$@*))
+(*@$(\mathcal H_\eta,A_{R,\eta},b_{R,\eta},c_\eta)$@*) <-
+    HyperplaneRepresentation((*@$g_{\eta'}$@*))
+
+require (*@$\mathcal H_\theta=\mathcal H_\eta$@*)
+require (*@$c_\theta(i)=c_\eta(i)$@*) on every (*@$H_i\in\mathcal H_\theta$@*)
+require (*@$A_{R,\theta}=A_{R,\eta}$@*) and
+        (*@$b_{R,\theta}=b_{R,\eta}$@*) on one common region (*@$R$@*)
+return true exactly when all requirements hold
+\end{lstlisting}
+
+\begin{lstlisting}[caption={Hiding certificates}]
+algorithm MultiHidingCertificate((*@$\theta,\eta,j_\theta,j_\eta$@*))
+normalize the hidden first-layer direction
+normalize and order all non-hidden affine hyperplanes
+normalize every active second-layer row by its positive hidden coefficient
+order second-layer rows canonically
+
+require equal normalized first-layer directions
+require equal non-hidden first-layer biases
+require equal normalized (*@$W^{(2)},W^{(3)},b^{(3)}$@*)
+
+(*@$t$@*) <- (*@$b^{(1,\eta)}_{j_\eta}-b^{(1,\theta)}_{j_\theta}$@*)
+require (*@$b^{(2,\eta)}
+          =b^{(2,\theta)}-tW^{(2,\theta)}_{:,j_\theta}$@*)
+require (*@$t\geq
+          \max_{i\in[n_2]} b^{(2,\theta)}_i/W^{(2,\theta)}_{ij_\theta}$@*)
+return true exactly when all requirements hold
+
+algorithm WidthOneHidingCertificate((*@$\theta,\eta,j_\theta,j_\eta$@*))
+if MultiHidingCertificate((*@$\theta,\eta,j_\theta,j_\eta$@*)) = true then
+    return true
+end if
+
+normalize the nonzero active row and output direction
+match non-hidden first-layer hyperplanes up to unoriented scaling
+recover the set of coordinates whose orientations are reversed
+recover (*@$I\subseteq[n_1]\setminus\{j\}$@*) and apply (*@$M_I\in\mathcal G_j$@*)
+require equality after the recovered sign flip, except for translation
+recover (*@$t$@*) and require (*@$\eta\in T_j(M_I\cdot\theta)$@*)
+return true exactly when all requirements hold
+\end{lstlisting}
+
+Here
+\[
+  T_j(\theta)
+  =
+  \left\{
+    \left(
+      W^{(1)},\
+      b^{(1)}+te_j,\
+      W^{(2)},\
+      b^{(2)}-tW^{(2)}_{:,j},\
+      W^{(3)},\
+      b^{(3)}
+    \right)
+    :
+    t\geq
+    \max_{i\in[n_2]}
+    \frac{b^{(2)}_i}{W^{(2)}_{ij}}
+  \right\}
+\]
+is the paper's translation family, and for \(n_2=1\)
+\[
+  M_I
+  =
+  I_{n_1}
+  -
+  \sum_{k\in I}e_je_k^\top
+  -
+  2\sum_{k\in I}e_ke_k^\top,
+  \qquad
+  \mathcal G_j
+  =
+  \{M_I:I\subseteq[n_1]\setminus\{j\}\}.
+\]
+
+\section{Symmetry and identifiability classification}
+
+\begin{lstlisting}[caption={Symmetry and identifiability classification}]
+algorithm ClassifySymmetries((*@$\theta$@*))
+input: (*@$\theta\in\Theta_{\mathcal A}$@*)
+output: certified non-identifiable, generic-ID candidate,
+        or undetermined
+
+dead <- {(*@$i\in[n_2]$@*) :
+         every entry of (*@$[W^{(2)}_{i,:},b^{(2)}_i]$@*) is nonpositive}
+linear <- {(*@$i\in[n_2]$@*) :
+           every entry of (*@$[W^{(2)}_{i,:},b^{(2)}_i]$@*) is nonnegative}
+hiding <- {(*@$j\in[n_1]$@*) : (*@$\theta$@*) hides hyperplane (*@$j$@*)}
+
+if dead (*@$\neq\varnothing$@*) or linear (*@$\neq\varnothing$@*)
+   or hiding (*@$\neq\varnothing$@*) then
+    return certified non-identifiable
+else if SomeEntryIsZero((*@$[W^{(2)},b^{(2)}]$@*)) then
+    return undetermined
+else
+    return generic-ID candidate
+end if
+\end{lstlisting}
+
+On \(\widetilde{\Theta}_{\mathcal A}\), this is Theorem~13: non-identifiability
+is equivalent to a strictly negative row, a strictly positive row, or a common
+strict hiding column.  With zero entries, the weak conditions still give
+explicit symmetries; otherwise the generic conclusion is left undetermined.
+
+\section{Generic fiber dimension}
+
+For the induced map \(g_{\theta'}:\R_{\geq0}^{n_1}\to\R^m\), let
+\(\mathcal H=\{H_1,\ldots,H_k\}\) be its breakpoint-hyperplane arrangement and
+let \(J=[n]\setminus[k]\) index the linear neurons, as in Proposition~5.  Thus
+\(r:=|J|=n-k\).  The \emph{essential dimension} is \(\dim(V_S)\),
+equivalently the dimension modulo \(\sim\).  The \emph{full dimension}
+restores the \(n_1+n_2\) positive-scaling directions.
+
+\begin{lstlisting}[caption={Dimension of the generic fiber modulo (*@$\sim$@*)}]
+algorithm GenericFiberDimension((*@$\theta$@*))
+input: generic (*@$\theta$@*); in the non-hiding case, one of Theorem 6's cases
+((*@$\bar\theta,\mathrm{dead}$@*)) <- RemoveDeadSecondLayer((*@$\theta$@*))
+(*@$q$@*) <- number of removed dead neurons
+
+if Width2((*@$\bar\theta$@*)) = 0 then
+    return (*@$\dim(\Theta_{\mathcal A})-m-(n_1+n_2)$@*)
+end if
+
+if (*@$\bar\theta$@*) hides hyperplane (*@$j$@*) then
+    active_dimension <- (*@$\dim(T_j(\bar\theta)/{\sim})=1$@*)
+else
+    form the induced map (*@$g_{\bar\theta'}:\mathbb R_{\geq0}^{n_1}
+                           \to\mathbb R^m$@*)
+    (*@$k$@*) <- number of nonlinear neurons of (*@$g_{\bar\theta'}$@*)
+    (*@$J$@*) <- linear-neuron set (*@$[n]\setminus[k]$@*)
+    (*@$r$@*) <- (*@$|J|=n-k$@*)
+
+    if (*@$r<\min(n_1,m)$@*) then
+        active_dimension <- (*@$\dim(V_{S_{\bar\theta'}})=r^2$@*)
+    else if (*@$r=n_1\leq m$@*) then
+        active_dimension <- (*@$\dim(V_S)=r^2$@*)
+    else if (*@$r=m<n_1$@*) then
+        active_dimension <- (*@$\dim(V_S)=r^2$@*)
+                            for every feasible orientation (*@$S$@*)
+    else if (*@$r=m+1\leq n_1$@*) then
+        active_dimension <- (*@$\dim(V_S)=m^2+m+n_1$@*)
+    end if
+end if
+
+return active_dimension + (*@$q(n_1+m)$@*)
+\end{lstlisting}
+
+The cases for \(V_S\) are those of Theorem~6 applied to the induced shallow
+map.  The full fiber dimension is obtained by restoring the \(n_1+n_2\)
+positive-scaling directions.  This dimension statement is made under the
+generic assumptions of the theorem.
+ty
+probability.
+
+\end{document}

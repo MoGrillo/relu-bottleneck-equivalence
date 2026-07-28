@@ -1094,38 +1094,55 @@ def generic_fiber_dimension(p: ThreeLayerParams) -> FiberDimensionReport:
 # ---------------------------------------------------------------------------
 
 
-def _genericity_warnings(p: ThreeLayerParams) -> Tuple[str, ...]:
+def _genericity_warnings(
+    p: ThreeLayerParams,
+    check_first_layer: bool = True,
+) -> Tuple[str, ...]:
     warnings: List[str] = []
     if p.n1 > p.d:
         warnings.append("The architecture is not bottleneck.")
     if p.n1 < 2:
         warnings.append("The paper's sign-based identifiability theorem assumes n1>=2.")
-    if p.W1.rank() < p.n1:
-        warnings.append("W1 does not have full row rank.")
     if _second_layer_sign_boundary(p):
         warnings.append(
             "W2 or b2 contains zero entries; exact certificates remain valid, "
             "but generic completeness and dimension formulas do not apply."
         )
-    if any(all(_is_zero(v) for v in p.W1.row(i)) and _is_zero(p.b1[i, 0]) for i in range(p.n1)):
-        warnings.append("A first-layer affine row is zero.")
-    affine_keys: List[VectorKey] = []
-    for i in range(p.n1):
-        try:
-            key, _ = unoriented_projective_normalize(tuple(p.W1.row(i)) + (p.b1[i, 0],))
-            if key in affine_keys:
-                warnings.append("Two first-layer affine hyperplanes coincide.")
-                break
-            affine_keys.append(key)
-        except ValueError:
-            pass
+    if check_first_layer:
+        if p.W1.rank() < p.n1:
+            warnings.append("W1 does not have full row rank.")
+        if any(
+            all(_is_zero(v) for v in p.W1.row(i)) and _is_zero(p.b1[i, 0])
+            for i in range(p.n1)
+        ):
+            warnings.append("A first-layer affine row is zero.")
+        affine_keys: List[VectorKey] = []
+        for i in range(p.n1):
+            try:
+                key, _ = unoriented_projective_normalize(
+                    tuple(p.W1.row(i)) + (p.b1[i, 0],)
+                )
+                if key in affine_keys:
+                    warnings.append("Two first-layer affine hyperplanes coincide.")
+                    break
+                affine_keys.append(key)
+            except ValueError:
+                pass
+    else:
+        warnings.append(
+            "First-layer rank and hyperplane-coincidence diagnostics were "
+            "skipped for this batch sample."
+        )
     warnings.append(
         "The full transversality/masked-product genericity condition is not checked automatically."
     )
     return tuple(warnings)
 
 
-def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
+def classify_symmetries(
+    p: ThreeLayerParams,
+    check_first_layer_warnings: bool = True,
+) -> SymmetryReport:
     kinds = second_layer_types(p)
     dead = tuple(i for i, kind in enumerate(kinds) if kind == "dead")
     linear = tuple(i for i, kind in enumerate(kinds) if kind == "linear")
@@ -1172,7 +1189,11 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
     # The paper's strict sign criterion applies only away from zeros in
     # [W2, b2].  The remaining geometric genericity assumptions are not
     # checked automatically.
-    sign_criterion_applicable = p.n1 >= 2 and not _second_layer_sign_boundary(p)
+    sign_criterion_applicable = (
+        p.architecture.bottleneck
+        and p.n1 >= 2
+        and not _second_layer_sign_boundary(p)
+    )
     generic_identifiable_candidate: Optional[bool]
     if sign_criterion_applicable:
         generic_identifiable_candidate = not certified_nonidentifiable
@@ -1184,6 +1205,10 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
     elif generic_identifiable_candidate is True:
         identifiability_status = (
             "generic-identifiable candidate (conditional on remaining genericity)"
+        )
+    elif not p.architecture.bottleneck:
+        identifiability_status = (
+            "undetermined outside the stated bottleneck identifiability theorem"
         )
     elif p.n1 < 2:
         identifiability_status = (
@@ -1208,7 +1233,10 @@ def classify_symmetries(p: ThreeLayerParams) -> SymmetryReport:
         sign_criterion_applicable=sign_criterion_applicable,
         generic_identifiable_candidate=generic_identifiable_candidate,
         identifiability_status=identifiability_status,
-        genericity_warnings=_genericity_warnings(p),
+        genericity_warnings=_genericity_warnings(
+            p,
+            check_first_layer=check_first_layer_warnings,
+        ),
         dimension=generic_fiber_dimension(p),
     )
 
@@ -1342,6 +1370,8 @@ def initialization_study(
     max_denominator: int = 10_000,
 ) -> List[Dict[str, Any]]:
     """Classify symmetries and dimensions for rational initialization samples."""
+    if samples_per_setting <= 0:
+        raise ValueError("samples_per_setting must be positive.")
     records: List[Dict[str, Any]] = []
     master = random.Random(seed)
     for scheme in schemes:
@@ -1356,9 +1386,24 @@ def initialization_study(
                     max_denominator=max_denominator,
                     name=f"{scheme}_{bias_mode}_{sample}",
                 )
-                report = analyze_parameter(p)
+                report = classify_symmetries(
+                    p,
+                    check_first_layer_warnings=False,
+                )
+                if report.certified_nonidentifiable:
+                    identifiability_outcome = "certified_nonidentifiable"
+                elif report.generic_identifiable_candidate is True:
+                    identifiability_outcome = "generic_identifiable_candidate"
+                else:
+                    identifiability_outcome = "undetermined"
                 records.append(
                     {
+                        "d": architecture.d,
+                        "n1": architecture.n1,
+                        "n2": architecture.n2,
+                        "m": architecture.m,
+                        "bottleneck": architecture.bottleneck,
+                        "parameter_dimension": p.parameter_dimension,
                         "scheme": scheme,
                         "bias_mode": bias_mode,
                         "sample": sample,
@@ -1366,6 +1411,7 @@ def initialization_study(
                         "certified_nonidentifiable": report.certified_nonidentifiable,
                         "sign_criterion_applicable": report.sign_criterion_applicable,
                         "generic_identifiable_candidate": report.generic_identifiable_candidate,
+                        "identifiability_outcome": identifiability_outcome,
                         "identifiability_status": report.identifiability_status,
                         "has_dead": bool(report.dead_indices),
                         "has_linear": bool(report.linear_indices),
@@ -1375,12 +1421,202 @@ def initialization_study(
                         "essential_dimension": report.dimension.essential_dimension,
                         "full_dimension": report.dimension.full_dimension,
                         "dimension_exact_under_assumptions": report.dimension.exact_under_assumptions,
-                        "sign_boundary_warning": any(
-                            "sign boundaries" in warning for warning in report.genericity_warnings
-                        ),
+                        "sign_boundary_warning": _second_layer_sign_boundary(p),
                     }
                 )
     return records
+
+
+def _positive_integer_grid(
+    values: Sequence[int],
+    label: str,
+) -> Tuple[int, ...]:
+    """Validate and deduplicate one architecture-sweep axis."""
+    normalized: List[int] = []
+    for value in values:
+        if isinstance(value, bool):
+            raise ValueError(f"{label} must contain positive integers.")
+        try:
+            integer = int(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{label} must contain positive integers.") from exc
+        if integer != value or integer <= 0:
+            raise ValueError(f"{label} must contain positive integers.")
+        if integer not in normalized:
+            normalized.append(integer)
+    if not normalized:
+        raise ValueError(f"{label} must not be empty.")
+    return tuple(normalized)
+
+
+def iid_symmetric_sign_candidate_rate(
+    first_width: int,
+    second_width: int,
+) -> sp.Rational:
+    """Return the exact generic-ID sign-pattern rate for iid fair signs.
+
+    This baseline assumes that every entry of ``W2`` and ``b2`` has an
+    independent, symmetric, nonzero sign.  It counts strict sign patterns only;
+    it does not verify the paper's remaining geometric genericity assumptions.
+
+    A second-layer row is dead or linear with total probability ``2^-n1``.
+    Conditional candidate patterns are those for which no row is dead or
+    linear, excluding the ``n1`` mutually exclusive hiding patterns shared by
+    all ``n2`` rows.
+    """
+    first_widths = _positive_integer_grid((first_width,), "first_width")
+    second_widths = _positive_integer_grid((second_width,), "second_width")
+    n1 = first_widths[0]
+    n2 = second_widths[0]
+    if n1 < 2:
+        raise ValueError(
+            "The generic-identifiability sign theorem requires first_width >= 2."
+        )
+    no_dead_or_linear = (1 - sp.Rational(1, 2**n1)) ** n2
+    hiding = n1 * sp.Rational(1, 2 ** ((n1 + 1) * n2))
+    return sp.factor(no_dead_or_linear - hiding)
+
+
+def identifiability_rate_sweep(
+    dimensions: Sequence[int],
+    first_widths: Sequence[int],
+    second_widths: Sequence[int],
+    output_width: int = 1,
+    schemes: Sequence[str] = ("xavier_uniform", "he_normal"),
+    bias_modes: Sequence[str] = ("small_uniform",),
+    samples_per_setting: int = 100,
+    seed: int = 0,
+    max_denominator: int = 10_000,
+    bottleneck_only: bool = True,
+) -> List[Dict[str, Any]]:
+    """Sample a reproducible grid of dimensions and hidden-layer widths.
+
+    The returned records retain the tri-state conclusion of
+    :func:`classify_symmetries`.  In particular, a
+    ``generic_identifiable_candidate`` outcome is conditional on the paper's
+    remaining genericity assumptions; it is not an unconditional numerical
+    identifiability certificate.
+
+    By default, combinations with ``n1 > d`` are skipped because the complete
+    characterization implemented here is a bottleneck theorem.  Setting
+    ``bottleneck_only=False`` includes those architectures, but their generic
+    identifiability outcome is reported as undetermined unless an explicit
+    non-identifiability symmetry is certified.
+    """
+    dimensions = _positive_integer_grid(dimensions, "dimensions")
+    first_widths = _positive_integer_grid(first_widths, "first_widths")
+    second_widths = _positive_integer_grid(second_widths, "second_widths")
+    output_widths = _positive_integer_grid((output_width,), "output_width")
+    if samples_per_setting <= 0:
+        raise ValueError("samples_per_setting must be positive.")
+
+    architectures = [
+        Architecture(d=d, n1=n1, n2=n2, m=output_widths[0])
+        for d in dimensions
+        for n1 in first_widths
+        for n2 in second_widths
+        if not bottleneck_only or n1 <= d
+    ]
+    if not architectures:
+        raise ValueError(
+            "The sweep contains no architectures after applying bottleneck_only."
+        )
+
+    records: List[Dict[str, Any]] = []
+    master = random.Random(seed)
+    for architecture in architectures:
+        architecture_seed = master.randrange(2**31)
+        records.extend(
+            initialization_study(
+                architecture,
+                schemes=schemes,
+                bias_modes=bias_modes,
+                samples_per_setting=samples_per_setting,
+                seed=architecture_seed,
+                max_denominator=max_denominator,
+            )
+        )
+    return records
+
+
+def summarize_identifiability_rates(
+    records: Sequence[Mapping[str, Any]],
+    group_by: Sequence[str] = ("d", "n1", "n2", "m", "scheme", "bias_mode"),
+) -> List[Dict[str, Any]]:
+    """Aggregate sweep records into exact counts and empirical rates.
+
+    The three primary outcomes are mutually exclusive and exhaustive:
+    ``generic_identifiable_candidate``, ``certified_nonidentifiable``, and
+    ``undetermined``.  Their rates therefore use the same denominator and sum
+    to one in every group.  Rates and reported means are exact SymPy rationals.
+    """
+    group_by = tuple(group_by)
+    if not group_by:
+        raise ValueError("group_by must contain at least one field.")
+
+    groups: Dict[Tuple[Any, ...], List[Mapping[str, Any]]] = {}
+    for record in records:
+        missing = [field for field in group_by if field not in record]
+        if missing:
+            raise ValueError(f"Record is missing grouping field(s): {missing}.")
+        key = tuple(record[field] for field in group_by)
+        groups.setdefault(key, []).append(record)
+
+    summaries: List[Dict[str, Any]] = []
+    for key, group in groups.items():
+        total = len(group)
+        certified_count = sum(
+            bool(record["certified_nonidentifiable"]) for record in group
+        )
+        candidate_count = sum(
+            record["generic_identifiable_candidate"] is True for record in group
+        )
+        undetermined_count = total - certified_count - candidate_count
+        applicable_count = sum(
+            bool(record["sign_criterion_applicable"]) for record in group
+        )
+        dead_count = sum(bool(record["has_dead"]) for record in group)
+        linear_count = sum(bool(record["has_linear"]) for record in group)
+        hiding_count = sum(bool(record["has_hiding"]) for record in group)
+        boundary_count = sum(bool(record["sign_boundary_warning"]) for record in group)
+        exact_dimensions = [
+            int(record["essential_dimension"])
+            for record in group
+            if record["dimension_exact_under_assumptions"]
+            and record["essential_dimension"] is not None
+        ]
+
+        summary: Dict[str, Any] = dict(zip(group_by, key))
+        summary.update(
+            {
+                "samples": total,
+                "generic_identifiable_candidate_count": candidate_count,
+                "generic_identifiable_candidate_rate": sp.Rational(
+                    candidate_count, total
+                ),
+                "certified_nonidentifiable_count": certified_count,
+                "certified_nonidentifiable_rate": sp.Rational(
+                    certified_count, total
+                ),
+                "undetermined_count": undetermined_count,
+                "undetermined_rate": sp.Rational(undetermined_count, total),
+                "sign_criterion_applicable_rate": sp.Rational(
+                    applicable_count, total
+                ),
+                "dead_rate": sp.Rational(dead_count, total),
+                "linear_rate": sp.Rational(linear_count, total),
+                "hiding_rate": sp.Rational(hiding_count, total),
+                "sign_boundary_rate": sp.Rational(boundary_count, total),
+                "dimension_reported_count": len(exact_dimensions),
+                "mean_essential_dimension": (
+                    sp.Rational(sum(exact_dimensions), len(exact_dimensions))
+                    if exact_dimensions
+                    else None
+                ),
+            }
+        )
+        summaries.append(summary)
+    return summaries
 
 
 __all__ = [
@@ -1400,5 +1636,8 @@ __all__ = [
     "sample_grid_equal",
     "sample_rational_initialization",
     "initialization_study",
+    "iid_symmetric_sign_candidate_rate",
+    "identifiability_rate_sweep",
+    "summarize_identifiability_rates",
     "rationalize",
 ]

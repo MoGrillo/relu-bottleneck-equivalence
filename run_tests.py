@@ -6,7 +6,11 @@ from relu_bottleneck_tools import (
     ThreeLayerParams,
     analyze_parameter,
     apply_sign_flip,
+    classify_symmetries,
     equivalence_test,
+    iid_symmetric_sign_candidate_rate,
+    identifiability_rate_sweep,
+    summarize_identifiability_rates,
     translate_hidden,
     translate_linear_neuron,
 )
@@ -204,6 +208,100 @@ def test_n1_one_is_outside_identifiability_theorem() -> None:
     assert report.identifiable_under_genericity is None
 
 
+def test_nonbottleneck_is_outside_identifiability_theorem() -> None:
+    theta = ThreeLayerParams(
+        W1=sp.Matrix([[1], [2]]),
+        b1=sp.Matrix([0, 1]),
+        W2=sp.Matrix([[1, -1]]),
+        b2=sp.Matrix([1]),
+        W3=sp.Matrix([[1]]),
+        b3=sp.Matrix([0]),
+        name="nonbottleneck",
+    )
+    report = analyze_parameter(theta)
+    assert report.architecture.bottleneck is False
+    assert report.certified_nonidentifiable is False
+    assert report.sign_criterion_applicable is False
+    assert report.generic_identifiable_candidate is None
+    assert report.identifiable_under_genericity is None
+
+
+def test_identifiability_rate_sweep() -> None:
+    assert iid_symmetric_sign_candidate_rate(2, 1) == sp.Rational(1, 2)
+    assert iid_symmetric_sign_candidate_rate(2, 2) == sp.Rational(17, 32)
+
+    options = dict(
+        dimensions=(2,),
+        first_widths=(2, 3),
+        second_widths=(1, 2),
+        schemes=("xavier_uniform",),
+        bias_modes=("small_uniform",),
+        samples_per_setting=3,
+        seed=19,
+        max_denominator=10_000,
+    )
+    bottleneck_records = identifiability_rate_sweep(**options)
+    assert len(bottleneck_records) == 6
+    assert all(record["d"] == 2 and record["n1"] == 2 for record in bottleneck_records)
+    assert bottleneck_records == identifiability_rate_sweep(**options)
+
+    summaries = summarize_identifiability_rates(bottleneck_records)
+    assert len(summaries) == 2
+    for summary in summaries:
+        assert summary["samples"] == 3
+        assert (
+            summary["generic_identifiable_candidate_count"]
+            + summary["certified_nonidentifiable_count"]
+            + summary["undetermined_count"]
+            == summary["samples"]
+        )
+        assert (
+            summary["generic_identifiable_candidate_rate"]
+            + summary["certified_nonidentifiable_rate"]
+            + summary["undetermined_rate"]
+            == 1
+        )
+
+    all_records = identifiability_rate_sweep(
+        **options,
+        bottleneck_only=False,
+    )
+    assert len(all_records) == 12
+    nonbottleneck = [record for record in all_records if record["n1"] == 3]
+    assert nonbottleneck
+    assert all(not record["sign_criterion_applicable"] for record in nonbottleneck)
+    assert all(
+        record["generic_identifiable_candidate"] is None
+        for record in nonbottleneck
+    )
+
+
+def test_batch_warning_mode_preserves_mathematical_report() -> None:
+    theta = ThreeLayerParams(
+        W1=sp.eye(2),
+        b1=sp.Matrix([0, 0]),
+        W2=sp.Matrix([[1, -1], [-2, 1]]),
+        b2=sp.Matrix([1, -1]),
+        W3=sp.Matrix([[2, 3]]),
+        b3=sp.Matrix([0]),
+        name="batch_warning_mode",
+    )
+    full = classify_symmetries(theta)
+    batch = classify_symmetries(theta, check_first_layer_warnings=False)
+    assert full.certified_nonidentifiable == batch.certified_nonidentifiable
+    assert full.sign_criterion_applicable == batch.sign_criterion_applicable
+    assert (
+        full.generic_identifiable_candidate
+        == batch.generic_identifiable_candidate
+    )
+    assert full.identifiability_status == batch.identifiability_status
+    assert full.dimension == batch.dimension
+    assert any(
+        "skipped for this batch sample" in warning
+        for warning in batch.genericity_warnings
+    )
+
+
 if __name__ == "__main__":
     test_hiding_width_at_least_two()
     test_hiding_width_one_sign_flip()
@@ -215,4 +313,7 @@ if __name__ == "__main__":
     test_symmetry_helpers_enforce_or_normalize_their_domains()
     test_layerwise_orientation_family_count()
     test_n1_one_is_outside_identifiability_theorem()
+    test_nonbottleneck_is_outside_identifiability_theorem()
+    test_identifiability_rate_sweep()
+    test_batch_warning_mode_preserves_mathematical_report()
     print("All exact-arithmetic smoke tests passed.")

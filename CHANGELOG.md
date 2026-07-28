@@ -44,3 +44,21 @@
 - Saved a fresh, fully executed set of notebook outputs.
 - Declared `nbconvert` explicitly and made `setup.sh` install from the shared
   requirements file.
+
+## Version 6
+
+- Added reproducible sweeps over input dimension and both hidden-layer widths.
+- Added exact aggregation of generic-identifiable candidate, certified
+  non-identifiable, and undetermined rates with a shared denominator.
+- Added an exact iid symmetric-sign baseline for separating width effects from
+  Monte Carlo variation across input dimensions.
+- Made non-bottleneck samples explicitly theorem-out-of-scope rather than
+  generic-identifiable candidates.
+- Added compact architecture tables and a width-by-width candidate-rate matrix
+  to the notebook.
+- Expanded the saved sweep to 50 architectures with `d,n1` up to 16 and `n2`
+  up to 32, using 2,500 exact-classification samples.
+- Added a batch mode that skips unused first-layer warning diagnostics while
+  preserving every mathematical classification and dimension result.
+- Added regression coverage for sweep reproducibility, rate accounting, and
+  non-bottleneck scope.
