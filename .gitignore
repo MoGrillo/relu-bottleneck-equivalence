@@ -6,3 +6,8 @@ venv/
 env/
 .DS_Store
 .pytest_cache/
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.synctex.gz

@@ -8,6 +8,8 @@ symmetries of three-layer ReLU networks with architecture
 
 - `relu_bottleneck_tools.py`: reusable exact-rational implementation.
 - `relu_bottleneck_symmetry_workbench.ipynb`: self-contained, executed workbench.
+- `algorithm_pseudocode.tex`: standalone pseudocode for the certificates,
+  classifier, fiber dimension, and architecture sweep.
 - `run_tests.py`: exact-arithmetic smoke and regression tests.
 - `setup.sh`: Debian/Ubuntu virtual-environment setup.
 - `requirements.txt`: pip dependencies.
@@ -22,6 +24,9 @@ classify_symmetries(theta)
 generic_fiber_dimension(theta)
 sample_rational_initialization(...)
 initialization_study(...)
+identifiability_rate_sweep(...)
+summarize_identifiability_rates(...)
+iid_symmetric_sign_candidate_rate(...)
 ```
 
 The workbench tests equivalence, classifies layerwise and hiding symmetries,
@@ -98,9 +103,21 @@ The notebook studies rationalized Xavier/Glorot and He/Kaiming initializations
 with small random biases. Zero-bias initialization is omitted from the main
 experiment to avoid the most obvious sign-boundary degeneracies.
 
-The summary reports unconditional non-identifiability certificates, conditional
-generic-identifiability candidates, and the frequencies of dead, linear, and
-hiding sign regimes.
+The summary reports three mutually exclusive outcomes with a common
+denominator: unconditional non-identifiability certificates, conditional
+generic-identifiability candidates, and undetermined cases. It also reports the
+frequencies of dead, linear, hiding, and sign-boundary regimes.
+
+`identifiability_rate_sweep(...)` repeats this experiment over a reproducible
+grid of input dimensions and hidden-layer widths.
+`summarize_identifiability_rates(...)` aggregates exact counts and rational
+rates. `iid_symmetric_sign_candidate_rate(...)` supplies the exact fair-sign
+baseline used to distinguish width effects from Monte Carlo variation. The
+default sweep keeps only `n1 <= d`; non-bottleneck architectures can be
+included explicitly, but their generic-identifiability status is left
+undetermined unless an unconditional non-identifiability symmetry is found.
+The executed notebook includes 50 architectures with `d,n1` up to 16 and `n2`
+up to 32.
 
 ## Anonymity
 
