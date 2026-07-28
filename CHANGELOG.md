@@ -9,7 +9,7 @@
 - Zero-bias initialization groups now report no generic identifiability
   rate when every sample lies on a sign boundary.
 - Added regression tests for sign-boundary behavior.
-- Added VS Code recommendations and `AGENTS.md` for Codex.
+- Added VS Code recommendations.
 
 ## Version 3
 
@@ -62,3 +62,14 @@
   preserving every mathematical classification and dimension result.
 - Added regression coverage for sweep reproducibility, rate accounting, and
   non-bottleneck scope.
+
+## Version 7
+
+- Made the expensive exact `W1.rank()` genericity diagnostic opt-in through
+  `check_first_layer_rank=True`.
+- Kept inexpensive zero-row and coincident-hyperplane warnings enabled in
+  ordinary one-parameter reports.
+- Added an executed notebook example analyzing an exact 493-parameter network.
+- Added measured exact-rational scaling results through 1,083,001 parameters.
+- Added 12,609-parameter dead-neuron, linear-neuron, and hiding examples,
+  together with sound equivalence certificates for explicit symmetry actions.

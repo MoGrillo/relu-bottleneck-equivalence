@@ -1097,6 +1097,7 @@ def generic_fiber_dimension(p: ThreeLayerParams) -> FiberDimensionReport:
 def _genericity_warnings(
     p: ThreeLayerParams,
     check_first_layer: bool = True,
+    check_first_layer_rank: bool = False,
 ) -> Tuple[str, ...]:
     warnings: List[str] = []
     if p.n1 > p.d:
@@ -1109,8 +1110,14 @@ def _genericity_warnings(
             "but generic completeness and dimension formulas do not apply."
         )
     if check_first_layer:
-        if p.W1.rank() < p.n1:
-            warnings.append("W1 does not have full row rank.")
+        if check_first_layer_rank:
+            if p.W1.rank() < p.n1:
+                warnings.append("W1 does not have full row rank.")
+        else:
+            warnings.append(
+                "The exact W1 rank diagnostic was skipped; pass "
+                "check_first_layer_rank=True to enable it."
+            )
         if any(
             all(_is_zero(v) for v in p.W1.row(i)) and _is_zero(p.b1[i, 0])
             for i in range(p.n1)
@@ -1142,7 +1149,16 @@ def _genericity_warnings(
 def classify_symmetries(
     p: ThreeLayerParams,
     check_first_layer_warnings: bool = True,
+    check_first_layer_rank: bool = False,
 ) -> SymmetryReport:
+    """Classify exact symmetries and report the predicted fiber dimension.
+
+    The exact ``W1.rank()`` diagnostic is disabled by default because rational
+    row reduction can dominate the runtime without changing any symmetry
+    certificate or dimension result.  Set ``check_first_layer_rank=True`` to
+    opt in.  ``check_first_layer_warnings=False`` also skips the inexpensive
+    zero-row and coincident-hyperplane diagnostics used in batch studies.
+    """
     kinds = second_layer_types(p)
     dead = tuple(i for i, kind in enumerate(kinds) if kind == "dead")
     linear = tuple(i for i, kind in enumerate(kinds) if kind == "linear")
@@ -1236,14 +1252,23 @@ def classify_symmetries(
         genericity_warnings=_genericity_warnings(
             p,
             check_first_layer=check_first_layer_warnings,
+            check_first_layer_rank=check_first_layer_rank,
         ),
         dimension=generic_fiber_dimension(p),
     )
 
 
-def analyze_parameter(p: ThreeLayerParams) -> SymmetryReport:
-    """User-facing alias for ``classify_symmetries``."""
-    return classify_symmetries(p)
+def analyze_parameter(
+    p: ThreeLayerParams,
+    check_first_layer_warnings: bool = True,
+    check_first_layer_rank: bool = False,
+) -> SymmetryReport:
+    """Analyze a parameter, with the expensive exact rank check opt-in."""
+    return classify_symmetries(
+        p,
+        check_first_layer_warnings=check_first_layer_warnings,
+        check_first_layer_rank=check_first_layer_rank,
+    )
 
 
 # ---------------------------------------------------------------------------

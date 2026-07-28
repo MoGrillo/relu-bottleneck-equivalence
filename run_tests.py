@@ -278,7 +278,7 @@ def test_identifiability_rate_sweep() -> None:
 
 def test_batch_warning_mode_preserves_mathematical_report() -> None:
     theta = ThreeLayerParams(
-        W1=sp.eye(2),
+        W1=sp.Matrix([[1, 0], [2, 0]]),
         b1=sp.Matrix([0, 0]),
         W2=sp.Matrix([[1, -1], [-2, 1]]),
         b2=sp.Matrix([1, -1]),
@@ -286,16 +286,35 @@ def test_batch_warning_mode_preserves_mathematical_report() -> None:
         b3=sp.Matrix([0]),
         name="batch_warning_mode",
     )
-    full = classify_symmetries(theta)
+    default = classify_symmetries(theta)
+    full = classify_symmetries(theta, check_first_layer_rank=True)
     batch = classify_symmetries(theta, check_first_layer_warnings=False)
-    assert full.certified_nonidentifiable == batch.certified_nonidentifiable
-    assert full.sign_criterion_applicable == batch.sign_criterion_applicable
-    assert (
-        full.generic_identifiable_candidate
-        == batch.generic_identifiable_candidate
+    public = analyze_parameter(theta, check_first_layer_rank=True)
+    for report in (default, batch, public):
+        assert full.certified_nonidentifiable == report.certified_nonidentifiable
+        assert full.sign_criterion_applicable == report.sign_criterion_applicable
+        assert (
+            full.generic_identifiable_candidate
+            == report.generic_identifiable_candidate
+        )
+        assert full.identifiability_status == report.identifiability_status
+        assert full.dimension == report.dimension
+    assert any(
+        "exact W1 rank diagnostic was skipped" in warning
+        for warning in default.genericity_warnings
     )
-    assert full.identifiability_status == batch.identifiability_status
-    assert full.dimension == batch.dimension
+    assert not any(
+        "exact W1 rank diagnostic was skipped" in warning
+        for warning in full.genericity_warnings
+    )
+    assert not any(
+        "W1 does not have full row rank" in warning
+        for warning in default.genericity_warnings
+    )
+    assert any(
+        "W1 does not have full row rank" in warning
+        for warning in full.genericity_warnings
+    )
     assert any(
         "skipped for this batch sample" in warning
         for warning in batch.genericity_warnings
