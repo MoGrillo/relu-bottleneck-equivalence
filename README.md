@@ -34,6 +34,15 @@ reports generic-fiber dimensions and identifiability conclusions under their
 stated assumptions, and studies rationalized Xavier/Glorot and He/Kaiming
 initializations.
 
+`analyze_parameter(...)` and `classify_symmetries(...)` skip exact row-rank
+computation for `W1` by default because rational row reduction can dominate
+the runtime without changing any symmetry certificate or fiber-dimension
+result. Pass `check_first_layer_rank=True` to request that additional
+genericity diagnostic. The executed notebook includes a 493-parameter exact
+example, three 121,001-parameter examples with explicit symmetries, measured
+analysis scaling through 1,083,001 exact rational parameters, and equivalence
+benchmarks through 482,001 parameters.
+
 ## Mathematical contract
 
 The equivalence test is sound on arbitrary exact inputs:
