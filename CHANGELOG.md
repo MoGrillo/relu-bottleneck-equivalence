@@ -9,7 +9,7 @@
 - Zero-bias initialization groups now report no generic identifiability
   rate when every sample lies on a sign boundary.
 - Added regression tests for sign-boundary behavior.
-- Added VS Code recommendations and `AGENTS.md` for Codex.
+- Added VS Code recommendations.
 
 ## Version 3
 
@@ -71,6 +71,5 @@
   ordinary one-parameter reports.
 - Added an executed notebook example analyzing an exact 493-parameter network.
 - Added measured exact-rational scaling results through 1,083,001 parameters.
-- Added 121,001-parameter dead-neuron, linear-neuron, and hiding examples,
+- Added 12,609-parameter dead-neuron, linear-neuron, and hiding examples,
   together with sound equivalence certificates for explicit symmetry actions.
-- Added generic and symmetry equivalence benchmarks through 482,001 parameters.

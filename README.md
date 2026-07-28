@@ -39,9 +39,8 @@ computation for `W1` by default because rational row reduction can dominate
 the runtime without changing any symmetry certificate or fiber-dimension
 result. Pass `check_first_layer_rank=True` to request that additional
 genericity diagnostic. The executed notebook includes a 493-parameter exact
-example, three 121,001-parameter examples with explicit symmetries, measured
-analysis scaling through 1,083,001 exact rational parameters, and equivalence
-benchmarks through 482,001 parameters.
+example, three 12,609-parameter examples with explicit symmetries, and measured
+analysis scaling through 1,083,001 exact rational parameters.
 
 ## Mathematical contract
 
@@ -127,9 +126,3 @@ included explicitly, but their generic-identifiability status is left
 undetermined unless an unconditional non-identifiability symmetry is found.
 The executed notebook includes 50 architectures with `d,n1` up to 16 and `n2`
 up to 32.
-
-## Anonymity
-
-The repository contains no author names, institutional affiliations, email
-addresses, paper identifiers, or links to non-anonymous profiles. Before public
-release, the Git commit metadata and hosting account must also remain neutral.
